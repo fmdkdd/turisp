@@ -1,0 +1,168 @@
+\documentclass[a4paper, 10pt]{article}
+
+%% Mandatory stuff
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+%% --
+
+\usepackage{amsmath}
+
+%% Bitstream Charter for text and maths
+%% with ye Olde french typography
+%% Note: fake small caps
+\usepackage[uppercase=upright,%
+  greeklowercase=upright,%
+  bitstream-charter]{mathdesign}
+%% --
+
+\usepackage[usenames, dvipsnames]{xcolor}
+\usepackage{url}
+
+%% Code listings
+\usepackage{listings}
+% UTF8 compatibility options
+% UTF8 chars are OK in code comment
+% but not elsewhere
+\lstset{extendedchars=false}
+%% Eye candy
+\lstdefinestyle{my-lisp}{
+  language=Lisp,
+  basicstyle=\small\rmfamily,
+  tabsize=3,
+  breaklines=false,
+  showstringspaces=false,
+  frame=l,
+  columns=fullflexible,
+  framerule=2pt,
+  rulecolor=\color{black!50}
+}
+\lstset{style=my-lisp}
+
+\title{Simulateur de machines de Turing}
+\author{Florent Marchand de Kerchove}
+
+\begin{document}
+
+\maketitle
+
+%% Intro
+
+Une machine de Turing est une construction volontairement simple,
+puisque destinée à être manipulée par un humain, et non par un
+automate capable d'effectuer des centaines de transitions par seconde.
+Un simulateur est donc assez court à décrire.
+
+Nous avons choisi le Common Lisp pour écrire ce programme, sans raison
+pratique particulière ; la justification est plutôt culturelle.  Le
+Lisp est un ancêtre parmi les langages de programmation, tout comme
+les machines de Turing sont les ancêtres des ordinateurs, et pourtant
+tous deux sont loin d'être obsolètes.
+
+\subsection*{Implémentation en Common Lisp}
+
+Pour simuler une machine, il nous faut la représenter en mémoire. En
+Lisp, la structure de liste est favorite, mais pas forcément
+efficace. Nous utiliserons donc également des tableaux et des vecteurs
+fournis par le Common Lisp.
+
+Afin de définir la machine, nous n'avons besoin que de ses transitions
+et de son état initial; tous les symboles de l'alphabet d'entrée, de
+sortie, et tous les états qui ne sont pas mentionnés dans les
+transitions ne seront pas utiles au simulateur, puisque jamais
+utilisés par la machine. Si l'on souhaite définir des machines
+acceptantes, il nous faudra également préciser la liste des états
+finaux. Enfin, nous laissons la possibilité de définir le symbole
+blanc, en utilisant le \# par défaut, conventionnellement.
+
+Les règles de transition seront donc passés dans une liste de
+vecteurs. Chaque vecteur spécifie une règle de la forme :
+\lstinline{#(p a q b x)}, où $p,q$ sont des états, $a,b$ des symboles
+et $x \in {"L", "R"}$. Notons que le Lisp n'impose pas de restriction
+sur les types. Nos états et symboles peuvent donc être spécifiés par
+des entiers, des chaînes de caractères, des listes ou même des
+machines de Turing !  Bien sûr, dans la pratique il sera plus aisé
+d'utiliser un type atomique comme les entiers ou les chaînes. Par
+exemple, la règle suivante : \lstinline{#(0 "a" 1 "b" "R")} remplace
+le symbole $a$ par $b$ sur la bande, si l'état courant est 0, et passe
+alors à l'état 1, en décalant la tête de lecture sur la droite.
+
+L'état initial est spécifié par le symbole qui le représente dans les
+règles de transition, et les états finaux sont passés dans une liste,
+qui peut être vide dans le cas d'une machine en mode
+calculateur. Enfin le symbole blanc spécial est également librement
+choisi, mais nous utiliserons \# dans nos exemples.
+
+Tout ceci nous permet de modéliser la machine, mais il nous manque un
+élément crucial : la bande d'entrée et de sortie. Cette bande sera
+représentée par un tableau à dimension variable (finie, sauf si vous
+disposez d'une machine à mémoire infinie), et la position de la tête
+de lecture sera conservée dans un entier qui indice la bande à partir
+de zéro.
+
+Ces informations en main, il nous suffit, pour simuler la machine sur
+une bande donnée, de faire une boucle qui exécute la transition
+suivante selon la donnée présente sous la tête de lecture et l'état
+courant, tant qu'une telle transition est possible. Lorsque la boucle
+s'arrête, la bande modifiée par le machine est affichée.
+Cette boucle contiendra en plus un test qui vérifiera si l'état
+courant est un état final, auquel cas le programme affichera le
+message «~calcul acceptant~».
+
+Nous ne prenons pas de précautions particulière pour garantir le
+«~bon~» fonctionnement de la machine : l'utilisateur est responsable
+des machines à simuler, et nous du simulateur. En particulier, c'est à
+lui de s'assurer que l'état initial figure bien dans les transitions,
+de même pour les éáts finaux. La programme vérifie un point : que la
+tête de lecture ne passe pas à gauche de l'origine de la bande, ce qui
+n'est pas accepté sur les machines du modèle standard.
+
+\subsection*{Exemples d'utilisation}
+
+Pour tester le simulateur, il faut tout d'abord lancer un interpréteur
+de Common Lisp. Nous utilisons celui fourni par
+GNU \footnote{\url{http://clisp.cons.org}}. Ensuite, il faut charger
+le fichier "turing.lisp" :
+
+\begin{lstlisting}
+> (load "turing.lisp")
+;; Loading file turing.lisp ...
+;; Loaded file turing.lisp
+T
+\end{lstlisting}
+
+Ensuite, il suffit d'appeler la fonction \textit{run-machine} sur une
+machine construite avec la fonction \textit{make-machine} et une bande
+retournée \textit{make-tape}, comme ceci :
+
+\begin{lstlisting}
+> (run-machine (make-machine '(#(0 "#" 1 0 "R")
+                               #(0 0 0 0 "R")) 0)
+               (make-tape '(0 0 0)))
+"0000"
+\end{lstlisting}
+
+Cette machine calcule le successeur du nombre passé en entrée, sous la
+forme standard $0^n$. Le premier argument de \textit{make-machine} est
+la liste des transitions. La première, \lstinline{(0 "#" 1 0 "R")}, transforme
+le \# en 0 si l'état courant est l'état 0, qui passe alors à l'état 1, en
+déplaçant la tête de lecture sur la droite. La seconde règle est une
+boucle sur l'état 0 qui lit les 0 sans les effacer. Le second argument
+de \textit{make-machine} est l'état initial, 0. Les états finaux ne
+sont pas utilisés dans cette machine en mode calculateur, donc pas
+passés en argument. Le seul argument de \textit{make-tape} est la
+donnée d'entrée sur la bande sous forme de liste de symboles de
+l'alphabet d'entrée ; ici ce sont 3 zéros. Enfin, l'interpréteur Lisp
+renvoie la chaîne "0000" qui représente la bande en fin de calcul
+(les \# superflus de gauche et de droite sont omis).
+
+Nous avons décrit dans la suite quelques autre machines élémentaires
+pour illustrer le fonctionnement du simulateur.
+
+\lstinputlisting[firstline=6]{machines.lisp}
+
+\subsection*{Code source}
+
+\lstinputlisting{turing.lisp}
+
+\end{document}
